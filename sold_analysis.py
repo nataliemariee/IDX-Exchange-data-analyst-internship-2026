@@ -21,12 +21,12 @@ sold_files = [
 ]
 
 # Load each file and concatenate into one combined dataset
-sold_dfs = []
+sold_sold_cleans = []
 for file in sold_files:
-    df = pd.read_csv(file, low_memory=False)
-    sold_dfs.append(df)
+    sold_clean = pd.read_csv(file, low_memory=False)
+    sold_sold_cleans.append(sold_clean)
 
-sold = pd.concat(sold_dfs, ignore_index=True)
+sold = pd.concat(sold_sold_cleans, ignore_index=True)
 
 # Row count BEFORE Residential filter
 print(f"\nSOLD - Total rows after concatenation (all property types): {len(sold)}")
@@ -286,13 +286,106 @@ print(sold_clean.groupby('BuyerOfficeName').agg(
 ).sort_values('transaction_count', ascending=False).head(15).to_string())
 
 # =============================================================================
-# WEEK 7 — OUTLIER DETECTION (coming soon)
+# WEEK 7 — OUTLIER DETECTION 
 # =============================================================================
 
+#
+# Purpose:
+# Extreme values in ClosePrice, LivingArea, and DaysOnMarket
+# can distort market statistics and trends. Rather than
+# deleting records from the original dataset, outliers are
+# identified and flagged using the Interquartile Range (IQR)
+# method. A separate analysis-ready dataset is then created
+# by excluding invalid records and statistical outliers.
+#
+# Business Rules:
+# - ClosePrice <= 0 is invalid
+# - LivingArea <= 0 is invalid
+# - DaysOnMarket < 0 is invalid
+#
+# Deliverables:
+# 1. Full dataset with outlier flags
+# 2. Filtered dataset for analysis
+# 3. Comparison of dataset size and median values
+# ============================================================
+
+# Flag invalid values
+sold_clean['Invalid_ClosePrice'] = sold_clean['ClosePrice'] <= 0
+sold_clean['Invalid_LivingArea'] = sold_clean['LivingArea'] <= 0
+sold_clean['Invalid_DaysOnMarket'] = sold_clean['DaysOnMarket'] < 0
+
+
+def flag_iqr_outliers(sold_clean, column):
+    """
+    Flags statistical outliers using the IQR method.
+
+    Q1 = 25th percentile
+    Q3 = 75th percentile
+    IQR = Q3 - Q1
+
+    Records outside:
+    [Q1 - 1.5*IQR, Q3 + 1.5*IQR]
+
+    are flagged as outliers.
+    """
+
+    Q1 = sold_clean[column].quantile(0.25)
+    Q3 = sold_clean[column].quantile(0.75)
+    IQR = Q3 - Q1
+
+    lower = Q1 - (1.5 * IQR)
+    upper = Q3 + (1.5 * IQR)
+
+    sold_clean[f'{column}_Outlier'] = (
+        (sold_clean[column] < lower) |
+        (sold_clean[column] > upper)
+    )
+
+    return sold_clean
+
+
+# Apply IQR outlier detection
+for col in ['ClosePrice', 'LivingArea', 'DaysOnMarket']:
+    sold_clean = flag_iqr_outliers(sold_clean, col)
+
+
+# Create filtered analysis dataset
+filtered_sold_clean = sold_clean[
+    (~sold_clean['Invalid_ClosePrice']) &
+    (~sold_clean['Invalid_LivingArea']) &
+    (~sold_clean['Invalid_DaysOnMarket']) &
+    (~sold_clean['ClosePrice_Outlier']) &
+    (~sold_clean['LivingArea_Outlier']) &
+    (~sold_clean['DaysOnMarket_Outlier'])
+]
+
+# Compare dataset sizes
+print("\n===== DATASET SIZE COMPARISON =====")
+print(f"Original Records : {len(sold_clean)}")
+print(f"Filtered Records : {len(filtered_sold_clean)}")
+print(f"Records Removed  : {len(sold_clean) - len(filtered_sold_clean)}")
+
+# Compare median values
+print("\n===== MEDIAN VALUE COMPARISON =====")
+
+for col in ['ClosePrice', 'LivingArea', 'DaysOnMarket']:
+    print(f"\n{col}")
+    print(f"Original Median : {sold_clean[col].median():,.2f}")
+    print(f"Filtered Median : {filtered_sold_clean[col].median():,.2f}")
 
 # =============================================================================
 # FINAL OUTPUT — Save clean CSV for Tableau
 # =============================================================================
 
-sold_clean.to_csv('data/02_intermediate/CRMLSSold_Cleaned.csv', index=False)
-print(f"\nSaved CRMLSSold_Cleaned.csv — {len(sold_clean):,} rows, {sold_clean.shape[1]} columns")
+# # Save full dataset with flags
+# sold_clean.to_csv(
+#     "../../data/02_intermediate/CRMLSSold_Flagged.csv",
+#     index=False
+# )
+
+# filtered_sold_clean.to_csv(
+#     "../../data/03_processed/CRMLSSold_Filtered.csv",
+#     index=False
+# )
+
+# print(f"\nSaved CRMLSSold_Filtered.csv — {len(filtered_sold_clean):,} rows, {filtered_sold_clean.shape[1]} columns")

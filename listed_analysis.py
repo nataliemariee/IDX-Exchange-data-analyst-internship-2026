@@ -281,11 +281,103 @@ print(listings_clean.groupby('ListOfficeName').agg(
 # =============================================================================
 # WEEK 7 — OUTLIER DETECTION (coming soon)
 # =============================================================================
+#
+# Purpose:
+# Extreme values in ClosePrice, LivingArea, and DaysOnMarket
+# can distort market statistics and trends. Rather than
+# deleting records from the original dataset, outliers are
+# identified and flagged using the Interquartile Range (IQR)
+# method. A separate analysis-ready dataset is then created
+# by excluding invalid records and statistical outliers.
+#
+# Business Rules:
+# - ClosePrice <= 0 is invalid
+# - LivingArea <= 0 is invalid
+# - DaysOnMarket < 0 is invalid
+#
+# Deliverables:
+# 1. Full dataset with outlier flags
+# 2. Filtered dataset for analysis
+# 3. Comparison of dataset size and median values
+# ============================================================
 
+# Flag invalid values
+listings_clean['Invalid_ClosePrice'] = listings_clean['ClosePrice'] <= 0
+listings_clean['Invalid_LivingArea'] = listings_clean['LivingArea'] <= 0
+listings_clean['Invalid_DaysOnMarket'] = listings_clean['DaysOnMarket'] < 0
+
+
+def flag_iqr_outliers(listings_clean, column):
+    """
+    Flags statistical outliers using the IQR method.
+
+    Q1 = 25th percentile
+    Q3 = 75th percentile
+    IQR = Q3 - Q1
+
+    Records outside:
+    [Q1 - 1.5*IQR, Q3 + 1.5*IQR]
+
+    are flagged as outliers.
+    """
+
+    Q1 = listings_clean[column].quantile(0.25)
+    Q3 = listings_clean[column].quantile(0.75)
+    IQR = Q3 - Q1
+
+    lower = Q1 - (1.5 * IQR)
+    upper = Q3 + (1.5 * IQR)
+
+    listings_clean[f'{column}_Outlier'] = (
+        (listings_clean[column] < lower) |
+        (listings_clean[column] > upper)
+    )
+
+    return listings_clean
+
+
+# Apply IQR outlier detection
+for col in ['ClosePrice', 'LivingArea', 'DaysOnMarket']:
+    listings_clean = flag_iqr_outliers(listings_clean, col)
+
+
+# Create filtered analysis dataset
+filtered_listings_clean = listings_clean[
+    (~listings_clean['Invalid_ClosePrice']) &
+    (~listings_clean['Invalid_LivingArea']) &
+    (~listings_clean['Invalid_DaysOnMarket']) &
+    (~listings_clean['ClosePrice_Outlier']) &
+    (~listings_clean['LivingArea_Outlier']) &
+    (~listings_clean['DaysOnMarket_Outlier'])
+]
+
+# Compare dataset sizes
+print("\n===== DATASET SIZE COMPARISON =====")
+print(f"Original Records : {len(listings_clean)}")
+print(f"Filtered Records : {len(filtered_listings_clean)}")
+print(f"Records Removed  : {len(listings_clean) - len(filtered_listings_clean)}")
+
+# Compare median values
+print("\n===== MEDIAN VALUE COMPARISON =====")
+
+for col in ['ClosePrice', 'LivingArea', 'DaysOnMarket']:
+    print(f"\n{col}")
+    print(f"Original Median : {listings_clean[col].median():,.2f}")
+    print(f"Filtered Median : {filtered_listings_clean[col].median():,.2f}")
 
 # =============================================================================
 # FINAL OUTPUT — Save clean CSV for Tableau
 # =============================================================================
 
-listings_clean.to_csv('data/02_intermediate/CRMLSListing_Cleaned.csv', index=False)
-print(f"\nSaved CRMLSListing_Cleaned.csv — {len(listings_clean):,} rows, {listings_clean.shape[1]} columns")
+# # Save full dataset with flags
+# listings_clean.to_csv(
+#     "../../data/02_intermediate/CRMLSListings_Flagged.csv",
+#     index=False
+# )
+
+# filtered_listings_clean.to_csv(
+#     "../../data/03_processed/CRMLSListing_Filtered.csv",
+#     index=False
+# )
+
+# print(f"\nSaved CRMLSListing_Filtered.csv — {len(filtered_listings_clean):,} rows, {filtered_listings_clean.shape[1]} columns")
