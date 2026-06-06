@@ -209,9 +209,81 @@ print(f"Columns before: {sold.shape[1]} | Columns after: {sold_clean.shape[1]}")
 
 
 # =============================================================================
-# WEEK 6 — FEATURE ENGINEERING (coming soon)
+# WEEK 6 — FEATURE ENGINEERING 
+# =============================================================================
 # =============================================================================
 
+# Make explicit copy to avoid SettingWithCopyWarning
+sold_clean = sold_clean.copy()
+
+# 1. Price Ratio — measures negotiation strength
+sold_clean['price_ratio'] = sold_clean['ClosePrice'] / sold_clean['ListPrice']
+
+# 2. Close to Original List Ratio — captures full price reduction history
+sold_clean['close_to_original_list_ratio'] = sold_clean['ClosePrice'] / sold_clean['OriginalListPrice']
+
+# 3. Price Per Square Foot — normalizes price across different home sizes
+sold_clean['price_per_sqft'] = sold_clean['ClosePrice'] / sold_clean['LivingArea']
+
+# 4. Listing to Contract Days — time from listing to accepted offer
+sold_clean['listing_to_contract_days'] = (
+    sold_clean['PurchaseContractDate'] - sold_clean['ListingContractDate']
+).dt.days
+
+# 5. Contract to Close Days — escrow and closing period duration
+sold_clean['contract_to_close_days'] = (
+    sold_clean['CloseDate'] - sold_clean['PurchaseContractDate']
+).dt.days
+
+# 6. Time series variables derived from CloseDate
+sold_clean['close_year'] = sold_clean['CloseDate'].dt.year
+sold_clean['close_month'] = sold_clean['CloseDate'].dt.month
+sold_clean['close_yrmo'] = sold_clean['CloseDate'].dt.to_period('M')
+
+# Sample output table showing new columns populated
+print("Sample of engineered metrics:")
+print(sold_clean[['ClosePrice', 'ListPrice', 'OriginalListPrice', 'LivingArea',
+                   'price_ratio', 'close_to_original_list_ratio', 'price_per_sqft',
+                   'listing_to_contract_days', 'contract_to_close_days',
+                   'close_year', 'close_month', 'close_yrmo']].head(5).to_string())
+
+# ── SEGMENT ANALYSIS ──────────────────────────────────────────────────────────
+
+# Summary by CountyOrParish
+print("\nSummary by CountyOrParish (top 15 by transaction count):")
+print(sold_clean.groupby('CountyOrParish').agg(
+    transaction_count=('ClosePrice', 'count'),
+    median_close_price=('ClosePrice', 'median'),
+    median_price_per_sqft=('price_per_sqft', 'median'),
+    median_days_on_market=('DaysOnMarket', 'median'),
+    avg_price_ratio=('price_ratio', 'mean')
+).sort_values('transaction_count', ascending=False).head(15).to_string())
+
+# Summary by PropertySubType
+print("\nSummary by PropertySubType:")
+print(sold_clean.groupby('PropertySubType').agg(
+    transaction_count=('ClosePrice', 'count'),
+    median_close_price=('ClosePrice', 'median'),
+    median_price_per_sqft=('price_per_sqft', 'median'),
+    median_days_on_market=('DaysOnMarket', 'median'),
+    avg_price_ratio=('price_ratio', 'mean')
+).sort_values('transaction_count', ascending=False).to_string())
+
+# Top 15 Listing Offices by transaction count
+print("\nTop 15 Listing Offices by transaction count:")
+print(sold_clean.groupby('ListOfficeName').agg(
+    transaction_count=('ClosePrice', 'count'),
+    total_volume=('ClosePrice', 'sum'),
+    median_close_price=('ClosePrice', 'median')
+).sort_values('transaction_count', ascending=False).head(15).to_string())
+
+# Top 15 Buyer Offices by transaction count
+print("\nTop 15 Buyer Offices by transaction count:")
+print(sold_clean.groupby('BuyerOfficeName').agg(
+    transaction_count=('ClosePrice', 'count'),
+    total_volume=('ClosePrice', 'sum'),
+    median_close_price=('ClosePrice', 'median')
+).sort_values('transaction_count', ascending=False).head(15).to_string())
 
 # =============================================================================
 # WEEK 7 — OUTLIER DETECTION (coming soon)

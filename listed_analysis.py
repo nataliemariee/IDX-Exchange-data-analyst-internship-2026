@@ -214,9 +214,69 @@ print(f"Columns before: {listings.shape[1]} | Columns after: {listings_clean.sha
 
 
 # =============================================================================
-# WEEK 6 — FEATURE ENGINEERING (coming soon)
+# WEEK 6 — FEATURE ENGINEERING AND MARKET METRICS
 # =============================================================================
 
+# Make explicit copy to avoid SettingWithCopyWarning
+listings_clean = listings_clean.copy()
+
+# 1. Price Reduction Ratio — list price vs original list price
+listings_clean['price_reduction_ratio'] = listings_clean['ListPrice'] / listings_clean['OriginalListPrice']
+
+# 2. Price Per Square Foot — normalizes price across different home sizes
+listings_clean['price_per_sqft'] = listings_clean['ListPrice'] / listings_clean['LivingArea']
+
+# 3. Listing to Contract Days — time from listing to accepted offer
+listings_clean['listing_to_contract_days'] = (
+    listings_clean['PurchaseContractDate'] - listings_clean['ListingContractDate']
+).dt.days
+
+# 4. Contract to Close Days — escrow and closing period duration
+listings_clean['contract_to_close_days'] = (
+    listings_clean['CloseDate'] - listings_clean['PurchaseContractDate']
+).dt.days
+
+# 5. Time series variables derived from ListingContractDate
+listings_clean['listing_year'] = listings_clean['ListingContractDate'].dt.year
+listings_clean['listing_month'] = listings_clean['ListingContractDate'].dt.month
+listings_clean['listing_yrmo'] = listings_clean['ListingContractDate'].dt.to_period('M')
+
+# Sample output table showing new columns populated
+print("Sample of engineered metrics:")
+print(listings_clean[['ListPrice', 'OriginalListPrice', 'LivingArea',
+                       'price_reduction_ratio', 'price_per_sqft',
+                       'listing_to_contract_days', 'contract_to_close_days',
+                       'listing_year', 'listing_month', 'listing_yrmo']].head(5).to_string())
+
+# ── SEGMENT ANALYSIS ──────────────────────────────────────────────────────────
+
+# Summary by CountyOrParish
+print("\nSummary by CountyOrParish (top 15 by listing count):")
+print(listings_clean.groupby('CountyOrParish').agg(
+    listing_count=('ListPrice', 'count'),
+    median_list_price=('ListPrice', 'median'),
+    median_price_per_sqft=('price_per_sqft', 'median'),
+    median_days_on_market=('DaysOnMarket', 'median'),
+    avg_price_reduction_ratio=('price_reduction_ratio', 'mean')
+).sort_values('listing_count', ascending=False).head(15).to_string())
+
+# Summary by PropertySubType
+print("\nSummary by PropertySubType:")
+print(listings_clean.groupby('PropertySubType').agg(
+    listing_count=('ListPrice', 'count'),
+    median_list_price=('ListPrice', 'median'),
+    median_price_per_sqft=('price_per_sqft', 'median'),
+    median_days_on_market=('DaysOnMarket', 'median'),
+    avg_price_reduction_ratio=('price_reduction_ratio', 'mean')
+).sort_values('listing_count', ascending=False).to_string())
+
+# Top 15 Listing Offices by listing count
+print("\nTop 15 Listing Offices by listing count:")
+print(listings_clean.groupby('ListOfficeName').agg(
+    listing_count=('ListPrice', 'count'),
+    total_volume=('ListPrice', 'sum'),
+    median_list_price=('ListPrice', 'median')
+).sort_values('listing_count', ascending=False).head(15).to_string())
 
 # =============================================================================
 # WEEK 7 — OUTLIER DETECTION (coming soon)
