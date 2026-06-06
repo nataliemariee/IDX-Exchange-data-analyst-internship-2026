@@ -111,19 +111,101 @@ print(sold[['ClosePrice', 'LivingArea', 'DaysOnMarket']]
 # WEEKS 4-5 — DATA CLEANING AND PREPARATION
 # =============================================================================
 
-date_fields = ["CloseDate", "PurchaseContractDate", "ListingContractDate", "ContractStatusChangeDate"]
+# Before row count
+print(f"Row count before cleaning: {len(sold):,}")
 
+# 1. Convert date fields to datetime format
+# Date fields are read as text (object) by default — must convert for date math
+date_fields = ['CloseDate', 'PurchaseContractDate', 'ListingContractDate', 'ContractStatusChangeDate']
 for field in date_fields:
     sold[field] = pd.to_datetime(sold[field])
 
-sold_clean = sold.drop(columns=columns_to_drop)
+print("\nDate field types after conversion:")
+print(sold[['CloseDate', 'PurchaseContractDate',
+            'ListingContractDate', 'ContractStatusChangeDate']].dtypes)
 
+# 2. Remove unnecessary or redundant columns
+# Dropping all columns flagged as >90% missing in Weeks 2-3
+# These columns are empty across all records and carry no analytical value
+missing_sold = pd.DataFrame({
+    'missing_count': sold.isnull().sum(),
+    'missing_pct': (sold.isnull().sum() / len(sold) * 100).round(2)
+})
+high_missing_sold = missing_sold[missing_sold['missing_pct'] > 90]
+columns_to_drop = high_missing_sold.index.tolist()
+
+sold_clean = sold.drop(columns=columns_to_drop)
+print(f"\nShape before dropping high-missing columns: {sold.shape}")
+print(f"Shape after dropping high-missing columns: {sold_clean.shape}")
+print(f"Columns dropped: {columns_to_drop}")
+
+# 3. Flag invalid numeric values
+# Flagging rather than deleting to preserve raw records for reference
+# ClosePrice <= 0: a home cannot sell for zero or negative dollars
 sold_clean['invalid_close_price'] = sold_clean['ClosePrice'] <= 0
+# LivingArea <= 0: a home cannot have zero or negative square footage
 sold_clean['invalid_living_area'] = sold_clean['LivingArea'] <= 0
+# DaysOnMarket < 0: a home cannot sell before it is listed
 sold_clean['invalid_days_on_market'] = sold_clean['DaysOnMarket'] < 0
+# Negative bedrooms/bathrooms: physically impossible
 sold_clean['invalid_bedrooms'] = sold_clean['BedroomsTotal'] < 0
 sold_clean['invalid_bathrooms'] = sold_clean['BathroomsTotalInteger'] < 0
 
+print("\nInvalid numeric value counts:")
+print(f"  ClosePrice <= 0:         {sold_clean['invalid_close_price'].sum():,}")
+print(f"  LivingArea <= 0:         {sold_clean['invalid_living_area'].sum():,}")
+print(f"  DaysOnMarket < 0:        {sold_clean['invalid_days_on_market'].sum():,}")
+print(f"  Negative Bedrooms:       {sold_clean['invalid_bedrooms'].sum():,}")
+print(f"  Negative Bathrooms:      {sold_clean['invalid_bathrooms'].sum():,}")
+
+# 4. Date consistency checks
+# ListingContractDate should precede PurchaseContractDate which should precede CloseDate
+sold_clean['listing_after_close_flag'] = sold_clean['CloseDate'] < sold_clean['ListingContractDate']
+sold_clean['purchase_after_close_flag'] = sold_clean['CloseDate'] < sold_clean['PurchaseContractDate']
+sold_clean['negative_timeline_flag'] = sold_clean['PurchaseContractDate'] < sold_clean['ListingContractDate']
+
+print("\nDate consistency flag counts:")
+print(f"  listing_after_close_flag:   {sold_clean['listing_after_close_flag'].sum():,}")
+print(f"  purchase_after_close_flag:  {sold_clean['purchase_after_close_flag'].sum():,}")
+print(f"  negative_timeline_flag:     {sold_clean['negative_timeline_flag'].sum():,}")
+
+# 5. Geographic data checks
+# California bounding box: Latitude 32.5-42.0, Longitude -124.5 to -114.0
+sold_clean['missing_coords_flag'] = sold_clean['Latitude'].isnull() | sold_clean['Longitude'].isnull()
+sold_clean['zero_coords_flag'] = (sold_clean['Latitude'] == 0) | (sold_clean['Longitude'] == 0)
+sold_clean['positive_longitude_flag'] = sold_clean['Longitude'] > 0
+sold_clean['out_of_state_flag'] = (
+    (sold_clean['Latitude'] < 32.5) | (sold_clean['Latitude'] > 42.0) |
+    (sold_clean['Longitude'] < -124.5) | (sold_clean['Longitude'] > -114.0)
+) & ~sold_clean['missing_coords_flag']
+
+print("\nGeographic data quality summary:")
+print(f"  Missing coordinates:        {sold_clean['missing_coords_flag'].sum():,}")
+print(f"  Zero coordinates:           {sold_clean['zero_coords_flag'].sum():,}")
+print(f"  Positive longitude (error): {sold_clean['positive_longitude_flag'].sum():,}")
+print(f"  Out of state/implausible:   {sold_clean['out_of_state_flag'].sum():,}")
+
+# 6. Full data quality summary
+print("\nFULL DATA QUALITY SUMMARY:")
+print(f"  Total records: {len(sold_clean):,}")
+print(f"  Columns: {sold_clean.shape[1]}")
+print(f"\n  -- Invalid Numeric Values --")
+print(f"  ClosePrice <= 0:            {sold_clean['invalid_close_price'].sum():,}")
+print(f"  LivingArea <= 0:            {sold_clean['invalid_living_area'].sum():,}")
+print(f"  DaysOnMarket < 0:           {sold_clean['invalid_days_on_market'].sum():,}")
+print(f"\n  -- Date Consistency --")
+print(f"  listing_after_close_flag:   {sold_clean['listing_after_close_flag'].sum():,}")
+print(f"  purchase_after_close_flag:  {sold_clean['purchase_after_close_flag'].sum():,}")
+print(f"  negative_timeline_flag:     {sold_clean['negative_timeline_flag'].sum():,}")
+print(f"\n  -- Geographic --")
+print(f"  Missing coordinates:        {sold_clean['missing_coords_flag'].sum():,}")
+print(f"  Zero coordinates:           {sold_clean['zero_coords_flag'].sum():,}")
+print(f"  Positive longitude:         {sold_clean['positive_longitude_flag'].sum():,}")
+print(f"  Out of state:               {sold_clean['out_of_state_flag'].sum():,}")
+
+# After row count
+print(f"\nRow count after cleaning: {len(sold_clean):,}")
+print(f"Columns before: {sold.shape[1]} | Columns after: {sold_clean.shape[1]}")
 
 
 # =============================================================================
@@ -140,5 +222,5 @@ sold_clean['invalid_bathrooms'] = sold_clean['BathroomsTotalInteger'] < 0
 # FINAL OUTPUT — Save clean CSV for Tableau
 # =============================================================================
 
-sold.to_csv('data/02_intermediate/CRMLSSold_Combined.csv', index=False)
-print(f"\nSaved CRMLSSold_Combined.csv — {len(sold):,} rows")
+sold_clean.to_csv('data/02_intermediate/CRMLSSold_Cleaned.csv', index=False)
+print(f"\nSaved CRMLSSold_Cleaned.csv — {len(sold_clean):,} rows, {sold_clean.shape[1]} columns")
