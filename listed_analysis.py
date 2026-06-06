@@ -1,4 +1,6 @@
 import pandas as pd
+import requests
+import io
 
 # =============================================================================
 # WEEK 1 — LISTINGS DATASET CONCATENATION
@@ -76,6 +78,34 @@ print(listings[['ClosePrice', 'LivingArea', 'DaysOnMarket']]
       .describe(percentiles=[.10, .25, .50, .75, .90, .95, .99])
       .to_string())
 
+# ── MORTGAGE RATE ENRICHMENT ─────────────────────────────────────────────
+# NOTE: Commented out due to FRED network timeout issue
+# Will be re-enabled once network access to fred.stlouisfed.org is resolved
+# Alternatively, load MORTGAGE30US.csv locally once downloaded manually
+
+# Step 1 - Fetching FRED MORTGAGE30US  Series
+# url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MORTGAGE30US"
+# response = requests.get(url, verify=False)
+# mortgage = pd.read_csv(io.StringIO(response.text), parse_dates=['observation_date'])
+# mortgage.columns = ['date', 'rate_30yr_fixed']
+
+# # Step 2 — Resample weekly rates to monthly averages
+# mortgage['year_month'] = mortgage['date'].dt.to_period('M')
+# mortgage_monthly = (
+#     mortgage.groupby('year_month')['rate_30yr_fixed']
+#     .mean().reset_index()
+# )
+
+# # Step 3 – Create a matching year_month key on the listings dataset
+# # Sold dataset — key off CloseDate
+# listings["year_month"] = pd.to_datetime(listings["CloseDate"]).dt.to_period("M")
+
+# # Step 4 – Merge
+# listing_with_rates = listings.merge(mortgage_monthly, on="year_month", how="left")
+
+# # Step 5 – Validate the merge
+# # Check for any unmatched rows (rate should not be null)
+# print(listing_with_rates["rate_30yr_fixed"].isnull().sum())
 # =============================================================================
 # WEEKS 4-5 — DATA CLEANING AND PREPARATION (coming soon)
 # =============================================================================

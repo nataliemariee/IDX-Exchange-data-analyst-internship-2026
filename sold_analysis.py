@@ -1,4 +1,6 @@
 import pandas as pd
+import requests
+import io
 
 # =============================================================================
 # WEEK 1 — SOLD DATASET CONCATENATION
@@ -76,9 +78,52 @@ print(sold[['ClosePrice', 'LivingArea', 'DaysOnMarket']]
       .describe(percentiles=[.10, .25, .50, .75, .90, .95, .99])
       .to_string())
 
+# ── MORTGAGE RATE ENRICHMENT ─────────────────────────────────────────────
+# NOTE: Commented out due to FRED network timeout issue
+# Will be re-enabled once network access to fred.stlouisfed.org is resolved
+# Alternatively, load MORTGAGE30US.csv locally once downloaded manually
+
+# Step 1 - Fetching FRED MORTGAGE30US  Series
+# url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=MORTGAGE30US"
+# response = requests.get(url, verify=False)
+# mortgage = pd.read_csv(io.StringIO(response.text), parse_dates=['observation_date'])
+# mortgage.columns = ['date', 'rate_30yr_fixed']
+
+# # Step 2 — Resample weekly rates to monthly averages
+# mortgage['year_month'] = mortgage['date'].dt.to_period('M')
+# mortgage_monthly = (
+#     mortgage.groupby('year_month')['rate_30yr_fixed']
+#     .mean().reset_index()
+# )
+
+# # Step 3 – Create a matching year_month key on the sold dataset
+# # Sold dataset — key off CloseDate
+# sold["year_month"] = pd.to_datetime(sold["CloseDate"]).dt.to_period("M")
+
+# # Step 4 – Merge
+# sold = sold.merge(mortgage_monthly, on="year_month", how="left")
+
+# # Step 5 – Validate the merge
+# # Check for any unmatched rows (rate should not be null)
+# print(sold["rate_30yr_fixed"].isnull().sum())
+
 # =============================================================================
-# WEEKS 4-5 — DATA CLEANING AND PREPARATION (coming soon)
+# WEEKS 4-5 — DATA CLEANING AND PREPARATION
 # =============================================================================
+
+date_fields = ["CloseDate", "PurchaseContractDate", "ListingContractDate", "ContractStatusChangeDate"]
+
+for field in date_fields:
+    sold[field] = pd.to_datetime(sold[field])
+
+sold_clean = sold.drop(columns=columns_to_drop)
+
+sold_clean['invalid_close_price'] = sold_clean['ClosePrice'] <= 0
+sold_clean['invalid_living_area'] = sold_clean['LivingArea'] <= 0
+sold_clean['invalid_days_on_market'] = sold_clean['DaysOnMarket'] < 0
+sold_clean['invalid_bedrooms'] = sold_clean['BedroomsTotal'] < 0
+sold_clean['invalid_bathrooms'] = sold_clean['BathroomsTotalInteger'] < 0
+
 
 
 # =============================================================================
